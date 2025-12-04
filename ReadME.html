@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+
+
+<!--The head contains metadata about our page and it's the place where we can load css files (for -->
+<!--styling) and javascript files.-->
+<head>
+
+    <meta name="author" content="Harrison Mills">
+    <meta charset="utf-8">
+    <!--<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">-->
+
+    <!-- Load JQuery and Bootstrap. They are javascript library that handle the layouting for us.-->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+    <script src="https://code.jquery.com/jquery-3.4.1.min.js" integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
+
+    <!--Set the title for the page-->
+    <title>Github Pages Tutorial</title>
+
+    <!-- The nav bar remains the same for every page, so by defining it in only one file, we only
+     need to edit it in one place when we make changes to it. -->
+    <script> $(function(){$("#header").load("header.html");});</script>
+
+    <!-- Import the css file, which defines how our website looks -->
+    <link href="css/main.css" rel="stylesheet">
+
+</head>
+
+
+<!--We define the elements that we actually want to display in the body element-->
+<body>
+
+    <!--This element is a placeholder for the header with the navbar, which we load above-->
+    <div id="header"></div>
+
+    <div class="column">
+
+        <!--h1 stands for heading 1, the largest kind of header. You can add smaller headings with h2, h3 etc.-->
+        <h1 id="setup">Read Me</h1>
+
+    <h2>75-Word Company Synopsis</h2>
+    <p>
+        SwiftSense Robotics develops precision industrial-automation modules used in small-scale 
+        manufacturing cells. Our products must detect motion, report system health, and actuate 
+        equipment with millisecond accuracy to ensure both operator safety and product quality. 
+        Because our devices run continuously and interact with physical hardware, missed deadlines 
+        can cause stoppages, jams, or unsafe conditions. For this reason, we employ a real-time 
+        operating system (RTOS) to guarantee deterministic behavior, isolate critical workloads, 
+        and ensure hard-deadline tasks always execute on schedule.
+    </p>
+
+    <h2>Task Table</h2>
+    <table>
+        <tr>
+            <th>Task Name</th>
+            <th>Period</th>
+            <th>Hard/Soft</th>
+            <th>Description</th>
+            <th>Consequence if Missed</th>
+        </tr>
+        <tr>
+            <td><strong>H1 – Motion Sensor Read</strong></td>
+            <td><strong>10 ms</strong></td>
+            <td><strong>Hard</strong></td>
+            <td><strong>Samples optical/IR sensors detecting part motion</strong></td>
+            <td><strong>Incorrect position detection → actuator collision or jam</strong></td>
+        </tr>
+        <tr>
+            <td><strong>H2 – Safety Check ISR</strong></td>
+            <td><strong>Event-driven (&lt;1 ms)</strong></td>
+            <td><strong>Hard</strong></td>
+            <td><strong>Validates emergency stop, interlocks, and fault flags</strong></td>
+            <td><strong>Safety violation, machine must halt</strong></td>
+        </tr>
+        <tr>
+            <td><strong>H3 – Actuator Command Out</strong></td>
+            <td><strong>20 ms</strong></td>
+            <td><strong>Hard</strong></td>
+            <td><strong>Sends PWM/step commands to drive mechanism</strong></td>
+            <td><strong>Timing drift → mechanical instability or overshoot</strong></td>
+        </tr>
+        <tr>
+            <td><strong>S1 – Diagnostics Logging</strong></td>
+            <td><strong>250 ms</strong></td>
+            <td><strong>Soft</strong></td>
+            <td><strong>Sends system status to UART/log buffer</strong></td>
+            <td><strong>Loss of logs, but system remains functional</strong></td>
+        </tr>
+        <tr>
+            <td><strong>S2 – UI/Display Refresh</strong></td>
+            <td><strong>500 ms</strong></td>
+            <td><strong>Soft</strong></td>
+            <td><strong>Updates LCD with counters, icons, and warnings</strong></td>
+            <td><strong>Sluggish UI; no safety/logic risk</strong></td>
+        </tr>
+        <tr>
+            <td><strong>Background Task – Housekeeping</strong></td>
+            <td><strong>Whenever idle</strong></td>
+            <td><strong>Soft</strong></td>
+            <td><strong>Buffer cleanup, counters, maintenance</strong></td>
+            <td><strong>No real consequence; lowest priority</strong></td>
+        </tr>
+    </table>
+
+    <h2>AI Usage</h2>
+    <p>
+        Prompts were “Take this code here (Application 4 code) and reformat it into an Aerospace 
+        Flight-Control / Pilot-Training Simulator Prototype.” This was done because the previous 
+        code met the requirements after renaming and adding behavior. AI was used to help brainstorm 
+        the simulation based on the task and previous designs. I then tested and ensured the code 
+        was formatted correctly and met quality standards. 
+        <strong>I take full responsibility for the code and any errors.</strong>
+    </p>
+
+    <h2>Discussion Questions</h2>
+
+    <h3>1. Scheduler Fit</h3>
+    <p>
+        The scheduler guarantees all Hard (H) tasks meet deadlines by assigning them higher 
+        priorities and keeping their execution times short and deterministic. Sensor and 
+        event-processing tasks preempt lower-priority logging and display tasks immediately. 
+        In Wokwi, timestamps prove this: a sensor threshold at <em>t = 412 ms</em> triggered a 
+        notification, and the Event Task began at <em>t = 413 ms</em>, showing &lt;1 ms latency. 
+        With a 100 ms sensor period, ample slack prevents deadline misses; no violations 
+        occurred under stress tests.
+    </p>
+
+    <h3>2. Race-Proofing</h3>
+    <p>
+        Races could occur when both the Event Task and background tasks modify shared state 
+        or print simultaneously. The critical line was:
+    </p>
+    <pre><code>current_mode = (current_mode == MODE_NORMAL) ? MODE_SAFE : MODE_NORMAL;</code></pre>
+    <p>
+        Without protection, the mode could flip twice or corrupt. A 
+        <strong>mutex (uart_mutex)</strong> was used to serialize all access to shared state 
+        and UART printing. Wrapping operations in 
+        <code>xSemaphoreTake</code> / <code>xSemaphoreGive</code> eliminated race conditions 
+        and prevented garbled UART output.
+    </p>
+
+    <h3>3. Worst-Case Spike</h3>
+    <p>
+        The heaviest load tested was simultaneous sensor spam plus rapid button presses, 
+        producing a flood of semaphore notifications. Logs show a stick input at 
+        <em>12,400 ms</em> followed by a HOTAS event at <em>12,401 ms</em>, confirming ~1 ms 
+        reaction time. With a hard sensor period of 100 ms, ~99 ms slack remained. Even under 
+        worst UART mutex contention (≈9–10 ms), ~90 ms margin was preserved. No hard deadlines 
+        came within 15% of their period.
+    </p>
+
+    <h3>4. Design Trade-Off</h3>
+    <p>
+        A continuous high-resolution telemetry logger was omitted because it would create long, 
+        unpredictable communication bursts that could block hard control tasks. For a 
+        flight-control or simulator prototype, deterministic timing is more important than 
+        verbose logging. Excluding heavy telemetry preserved RTOS responsiveness and made the 
+        prototype better resemble avionics behavior.
+    </p>
+      
+    </div>
+
+</body>
