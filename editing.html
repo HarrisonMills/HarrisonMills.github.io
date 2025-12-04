@@ -37,57 +37,229 @@
 
     <div class="column">
 
-        <h1>Editing the Website</h1>
-        <p>Having a website is fun. Changing it even more so.</p>
-        <p>There are many ways of modifying our website. We will focus just on the simplest ones here.</p>
-        <p>This is supposed to be your personal website or a project website, not a tutorial. So 
-            let’s change things around.</p>
-        <p>To get started, go to the github page for your repository. It will be at 
-            <code>github.com/&lt;username&gt;/&lt;username&gt;.github.io</code> <br>Once you’re there, it should say
-            <code>&lt;username&gt; / &lt;username&gt;.github.io</code> at the top.</p>
-        <p>Then click on index.html. (Note: The list of files that you see in your repository probably 
-            differ from the screenshot below. I’m taking screenshots as I am adding new files to this tutorial.)</p>
-        <p><img src="images/tutorials/editing_click_index.png" alt="Repo image. Select index.html"></p>
-        <p>This shows you the code used to generate the landing page for your website. It is called
-            index.html by default.</p>
-        <p>All the lines that start with <code>&lt;!--</code> and ends with <code>--&gt;</code> are
-            comments that I have added to explain what’s going on.
-        <img src="images/tutorials/editing_index_overview.png" alt="Overview of index.html"></p>
-        <p>Really, most of this is scaffolding. You can see the actual content of the website when you scroll down:</p>
-        <p><img src="images/tutorials/editing_index_content.png" alt="Actual content of index.html"></p>
-        <p>If we want to make changes to our website, we can simply click the edit button in the
-            top-right corner.
-        <img src="images/tutorials/editing_edit_button.png" alt="editing button"></p>
-        <p>There’s no stopping us now!</p>
-        <p>Let’s change the main heading of the website to “Hello World!” in the long tradition of
-            <a href="https://en.wikipedia.org/wiki/%22Hello,_World!%22_program">hello world programs</a> .</p>
-        <p>To do this, scroll down until you see <code>&lt;h1&gt;Welcome to the Github Pages Tutorial&lt;/h1&gt;</code></p>
-        <p>Replace this line with
-        <code>&lt;h1&gt;Hello World!&lt;/h1&gt;</code></p>
-        <p><img src="images/tutorials/editing_hello_world.png" alt="insert Hello World!"></p>
+/* --------------------------------------------------------------
+   Application: Flight-Control / Pilot-Training Simulator Prototype
+   Class: Real Time Systems – Fall 2025
+   Author: Harrison Mills
+   Email: ha934819@ucf.edu
+   Company Context: Lockheed Martin Missiles & Fire Control (Orlando)
+   AI Use: Used for role mapping to aerospace use-cases, 
+           ISR refactoring, timing/deadline annotations,
+           and FreeRTOS synchronization redesign.
+   Theme: F-35 Flight-Control & Training Simulator
 
-        <p>Next, let's store this change.</p>
+   SYSTEM SUMMARY (Wokwi Prototype)
+   --------------------------------------------------------------
+   - Control Stick ADC Task (Hard) – samples stick position every 100ms
+   - HOTAS Trigger ISR (Hard) – external interrupt for “pilot fired weapon”
+   - Flight-Control Integrator Task (Hard) – feeds flight model & LED warning
+   - Telemetry Logger Task (Soft) – UART prints sim state to “ground station”
+   - Heartbeat Task (Soft) – blinks LED to show scheduler health
+   - Uses mutex, binary sem, counting sem, task notifications
+   - UART represents external comms to instructor / training console
+   --------------------------------------------------------------*/
 
-        <p>Before Github became the place to host websites, git (the technical tool) and Github
-            (the website) were used to host code. More specifically, they allow programmers to
-            save incremental changes and reset their code to safe points. If you have heard about
-            “version control,” that’s what this means.</p>
-        <p>To keep track of the changes, Github expects you to write a short summary of the changes
-            that you make at the bottom of the page.</p>
-        <p>For this project, always directly commit your changes to the master branch. Git gives
-            you the option of creating multiple independent branches of your project which, is probably
-            not what you want to get involved in (c.f. the ever relevant
-            <a href="https://xkcd.com/1597/">Randall Munroe</a>).</p>
-        <p>When you’re happy with your changes and description, click “Commit changes.”
-        <img src="images/tutorials/editing_commit_changes.png" alt="insert Hello World!"></p>
-        <p>Now go to your website at, <code>&lt;username&gt;.github.io</code><br>
-        Note: You may have to wait a minute or two for the change to show up on your website. You can also try
-        to force a "hard reload," which ignores files in your browser's cache by pressing Ctrl+R or Command+R.</p>
-        <p><img src="images/tutorials/editing_updated_website.png" alt="Updated website"></p>
-        <p>Alright! You have just made the first change to your website.</p>
-        <p>The <a href="html_basics.html">next section</a> will teach you all of the basics of html
-            that you need to know to display your first blog post.</p>
-        
+#include <stdio.h>
+#include <stdbool.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
+#include "driver/gpio.h"
+#include "driver/adc.h"
+#include "esp_adc_cal.h"
+#include "esp_log.h"
+
+/* --------------------------------------------------------------
+   HARDWARE (Wokwi)
+   -------------------------------------------------------------- */
+#define RED_LED      GPIO_NUM_26  // WARNING / ALERT
+#define GREEN_LED    GPIO_NUM_2   // HEARTBEAT
+#define HOTAS_TRIGGER_PIN GPIO_NUM_4  // ISR button
+#define ADC_CH       ADC1_CHANNEL_4   // GPIO34 – Stick Y-axis
+
+/* --------------------------------------------------------------
+   TIMING REQUIREMENTS (Aerospace context)
+   -------------------------------------------------------------- */
+#define STICK_POLL_MS        100   // Hard periodic
+#define TRIGGER_DEBOUNCE_MS   50   // ISR debounce
+#define LED_ALERT_BLINK_MS   200
+#define LED_ALERT_COUNT       6
+#define TELEMETRY_PERIOD_MS  250   // Soft deadline
+
+/* --------------------------------------------------------------
+   RTOS OBJECTS
+   -------------------------------------------------------------- */
+static SemaphoreHandle_t stickCountingSem = NULL;   // Counting sem → stick threshold exceeded
+static SemaphoreHandle_t triggerBinarySem = NULL;   // ISR → HOTAS trigger
+static SemaphoreHandle_t uart_mutex = NULL;         // Protect UART prints
+
+static TaskHandle_t flightControlHandle = NULL;
+
+/* --------------------------------------------------------------
+   SHARED STATE
+   -------------------------------------------------------------- */
+typedef enum { MODE_TRAINING = 0, MODE_COMBAT } fc_mode_t;
+static fc_mode_t flight_mode = MODE_TRAINING;
+
+static int last_stick_raw = 0;
+
+/* --------------------------------------------------------------
+   ADC Calibration
+   -------------------------------------------------------------- */
+static esp_adc_cal_characteristics_t adc_chars;
+
+/* UART-safe print */
+#define SAFE_PRINT(fmt, ...) \
+    do { \
+        xSemaphoreTake(uart_mutex, portMAX_DELAY); \
+        printf(fmt, ##__VA_ARGS__); fflush(stdout); \
+        xSemaphoreGive(uart_mutex); \
+    } while (0)
+
+/* ==============================================================
+   HEARTBEAT TASK (SOFT)
+   - Shows that the flight computer scheduler is alive
+   ==============================================================*/
+void heartbeat_task(void *pv)
+{
+    bool on = true;
+    while (1) {
+        gpio_set_level(GREEN_LED, on);
+        on = !on;
+        vTaskDelay(pdMS_TO_TICKS(500)); // 1 Hz
+    }
+}
+
+/* ==============================================================
+   CONTROL STICK ADC TASK (HARD)
+   - Reads pilot stick every 100ms (flight model input)
+   ==============================================================*/
+void stick_task(void *pv)
+{
+    adc1_config_width(ADC_WIDTH_BIT_12);
+    adc1_config_channel_atten(ADC_CH, ADC_ATTEN_DB_11);
+
+    esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11,
+                             ADC_WIDTH_BIT_12, 1100, &adc_chars);
+
+    while (1) {
+        int raw = adc1_get_raw(ADC_CH);
+        last_stick_raw = raw;
+
+        SAFE_PRINT("[STICK] raw=%d\n", raw);
+
+        if (raw > 3000) {  // extreme pull (sim → high-G yank)
+            xSemaphoreGive(stickCountingSem);
+            xTaskNotifyGive(flightControlHandle);
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(STICK_POLL_MS));  // Hard period
+    }
+}
+
+/* ==============================================================
+   HOTAS TRIGGER INTERRUPT (HARD)
+   ==============================================================*/
+static void IRAM_ATTR hotas_isr(void *arg)
+{
+    static uint32_t last = 0;
+    uint32_t now = xTaskGetTickCountFromISR();
+
+    if (now - last > pdMS_TO_TICKS(TRIGGER_DEBOUNCE_MS)) {
+        xSemaphoreGiveFromISR(triggerBinarySem, NULL);
+        vTaskNotifyGiveFromISR(flightControlHandle, NULL);
+    }
+    last = now;
+}
+
+/* ==============================================================
+   FLIGHT CONTROL INTEGRATOR (HARD)
+   - Responds to stick threshold events + HOTAS trigger
+   ==============================================================*/
+void flight_control_task(void *pv)
+{
+    while (1) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        /* ---- Stick events ---- */
+        if (uxSemaphoreGetCount(stickCountingSem) > 0) {
+            while (xSemaphoreTake(stickCountingSem, 0) == pdTRUE) {}
+
+            SAFE_PRINT("[FC] EXTREME STICK INPUT: triggering G-limit alert\n");
+
+            // Blink LED to simulate pilot warning
+            for (int i = 0; i < LED_ALERT_COUNT; i++) {
+                gpio_set_level(RED_LED, 1);
+                vTaskDelay(pdMS_TO_TICKS(LED_ALERT_BLINK_MS));
+                gpio_set_level(RED_LED, 0);
+                vTaskDelay(pdMS_TO_TICKS(LED_ALERT_BLINK_MS));
+            }
+        }
+
+        /* ---- HOTAS trigger events ---- */
+        if (xSemaphoreTake(triggerBinarySem, 0) == pdTRUE) {
+            flight_mode = (flight_mode == MODE_TRAINING)
+                          ? MODE_COMBAT
+                          : MODE_TRAINING;
+
+            const char *mode = (flight_mode == MODE_TRAINING)
+                               ? "TRAINING"
+                               : "COMBAT";
+
+            SAFE_PRINT("[FC] HOTAS Trigger: mode -> %s\n", mode);
+        }
+    }
+}
+
+/* ==============================================================
+   TELEMETRY LOGGER (SOFT)
+   - Sends current sim state to instructor console (UART)
+   ==============================================================*/
+void telemetry_task(void *pv)
+{
+    while (1) {
+        SAFE_PRINT("[TELEM] mode=%s  stick=%d\n",
+                   (flight_mode == MODE_TRAINING ? "TRAINING" : "COMBAT"),
+                   last_stick_raw);
+
+        vTaskDelay(pdMS_TO_TICKS(TELEMETRY_PERIOD_MS));  // Soft deadline
+    }
+}
+
+/* ==============================================================
+   MAIN ENTRY
+   ==============================================================*/
+void app_main(void)
+{
+    printf("\n--- F-35 Flight-Control Simulator Booting ---\n");
+
+    stickCountingSem = xSemaphoreCreateCounting(10, 0);
+    triggerBinarySem = xSemaphoreCreateBinary();
+    uart_mutex        = xSemaphoreCreateMutex();
+
+    gpio_reset_pin(RED_LED);
+    gpio_set_direction(RED_LED, GPIO_MODE_OUTPUT);
+
+    gpio_reset_pin(GREEN_LED);
+    gpio_set_direction(GREEN_LED, GPIO_MODE_OUTPUT);
+
+    // HOTAS → GPIO interrupt
+    gpio_reset_pin(HOTAS_TRIGGER_PIN);
+    gpio_set_direction(HOTAS_TRIGGER_PIN, GPIO_MODE_INPUT);
+    gpio_set_pull_mode(HOTAS_TRIGGER_PIN, GPIO_PULLUP_ONLY);
+    gpio_set_intr_type(HOTAS_TRIGGER_PIN, GPIO_INTR_NEGEDGE);
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(HOTAS_TRIGGER_PIN, hotas_isr, NULL);
+
+    // Create RTOS tasks
+    xTaskCreate(heartbeat_task,  "heartbeat", 2048, NULL, 1, NULL);   // soft
+    xTaskCreate(stick_task,      "stick",     3072, NULL, 4, NULL);   // hard
+    xTaskCreate(flight_control_task,"fc",      4096, NULL, 3, &flightControlHandle); // hard
+    xTaskCreate(telemetry_task,  "telemetry", 2048, NULL, 2, NULL);   // soft
+
+    SAFE_PRINT("System initialized. Mode=TRAINING\n");
+}
+
     </div>
 
 </body>
